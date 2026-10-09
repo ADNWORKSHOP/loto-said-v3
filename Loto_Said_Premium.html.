@@ -1,0 +1,244 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#080e1c">
+<title>Loto Said — Premium</title>
+<style>
+:root {
+  --bg:#080e1c;
+  --panel:#101a2d;
+  --panel2:#142139;
+  --gold:#e7c477;
+  --gold2:#f8e5ad;
+  --text:#f7f5ef;
+  --muted:#96a4ba;
+  --line:rgba(231,196,119,.19);
+}
+* {box-sizing:border-box}
+body {
+  margin:0;
+  color:var(--text);
+  background:radial-gradient(ellipse at 50% -10%,#243756 0%,var(--bg) 55%);
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+  min-height:100vh;
+}
+button {font:inherit;cursor:pointer}
+.app {max-width:520px;margin:auto;padding:24px 18px 100px}
+.top {display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}
+.brand {display:flex;align-items:center;gap:11px}
+.logo {
+  width:43px;height:43px;border-radius:14px;
+  display:grid;place-items:center;
+  color:#151321;font-size:23px;font-weight:900;
+  background:linear-gradient(145deg,var(--gold2),#c49b4c);
+  box-shadow:0 5px 24px #e7c47724;
+}
+.brand-name {font-size:20px;font-weight:850;letter-spacing:-.7px}
+.brand-sub {color:var(--muted);font-size:10px;letter-spacing:2px;text-transform:uppercase;margin-top:3px}
+.avatar {
+  width:40px;height:40px;border:1px solid var(--line);border-radius:50%;
+  display:grid;place-items:center;color:var(--gold);background:#111b2d;font-size:17px
+}
+.eyebrow {color:var(--gold);font-size:11px;font-weight:800;letter-spacing:2px;text-transform:uppercase}
+h1 {font-size:32px;line-height:1.12;letter-spacing:-1.2px;margin:10px 0}
+h1 span {color:var(--gold2)}
+.intro {color:var(--muted);font-size:14px;line-height:1.6;margin:0 0 23px}
+.hero {
+  border:1px solid var(--line);border-radius:24px;padding:21px;
+  background:linear-gradient(140deg,#192945,#10192a 72%);
+  box-shadow:0 16px 45px #0003;position:relative;overflow:hidden;
+}
+.hero:after {
+  content:"";position:absolute;width:180px;height:180px;border-radius:50%;
+  right:-80px;top:-95px;border:1px solid #e7c47724;
+  box-shadow:0 0 0 20px #e7c47708,0 0 0 40px #e7c47705;
+}
+.hero-top {display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tag {font-size:10px;font-weight:800;letter-spacing:1px;color:#142033;background:var(--gold);border-radius:20px;padding:7px 10px}
+.draw-title {font-size:23px;font-weight:850;letter-spacing:-.5px;margin:22px 0 5px}
+.draw-note {font-size:12px;color:var(--muted)}
+.balls {display:flex;flex-wrap:wrap;gap:9px;margin:20px 0}
+.ball {
+  width:43px;height:43px;border-radius:50%;display:grid;place-items:center;
+  background:linear-gradient(145deg,#fff9e9,#d7b765);
+  color:#172035;font-size:15px;font-weight:900;
+  box-shadow:inset -3px -4px 7px #8a672b26,0 4px 12px #0003;
+}
+.ball.star {
+  background:linear-gradient(145deg,#f8df9c,#c89437);
+  border-radius:13px;color:#30220a;
+}
+.primary {
+  width:100%;border:0;border-radius:14px;padding:15px 17px;
+  color:#151b29;font-weight:850;
+  background:linear-gradient(110deg,#f5dda0,#d9b15e);
+  box-shadow:0 7px 20px #d9b15e20;
+}
+.primary:active {transform:scale(.985)}
+.disclaimer {font-size:11px;line-height:1.5;color:var(--muted);margin:13px 1px 0}
+.section-head {display:flex;justify-content:space-between;align-items:center;margin:29px 0 13px}
+h2 {font-size:17px;margin:0;letter-spacing:-.3px}
+.small-link {color:var(--gold);font-size:12px;background:none;border:0}
+.games {display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.game {
+  background:linear-gradient(145deg,#142139,#0f1829);
+  border:1px solid var(--line);border-radius:18px;padding:16px 13px;text-align:left;color:var(--text);
+}
+.game:focus-visible,.primary:focus-visible,.nav button:focus-visible {outline:2px solid var(--gold)}
+.game-icon {font-size:21px;margin-bottom:13px}
+.game strong {display:block;font-size:14px}
+.game small {display:block;color:var(--muted);font-size:11px;margin-top:6px;line-height:1.5}
+.game.active {border-color:#e7c47780;background:linear-gradient(145deg,#26334a,#142139)}
+.stats {display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stat {border:1px solid #ffffff10;background:#101a2d;border-radius:16px;padding:15px}
+.stat-label {color:var(--muted);font-size:11px}
+.stat-value {font-size:20px;font-weight:850;color:var(--gold2);margin-top:8px}
+.stat-note {font-size:10px;color:var(--muted);margin-top:4px}
+.footer-note {text-align:center;color:#718096;font-size:10px;line-height:1.6;margin:24px 4px 0}
+.nav {
+  position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+  width:min(520px,100%);display:grid;grid-template-columns:repeat(4,1fr);
+  background:#0b1322f5;backdrop-filter:blur(18px);
+  border-top:1px solid var(--line);padding:12px 8px calc(12px + env(safe-area-inset-bottom));
+}
+.nav button {background:none;border:0;color:#8d9ab0;font-size:10px;display:grid;gap:5px;justify-items:center}
+.nav button span {font-size:19px}
+.nav button.active {color:var(--gold2)}
+.toast {font-size:12px;color:var(--gold2);margin-top:12px;min-height:18px}
+@media(min-width:520px) {
+  .app {padding-top:32px}
+  h1 {font-size:37px}
+}
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="logo">S</div>
+      <div>
+        <div class="brand-name">LOTO SAID</div>
+        <div class="brand-sub">Édition premium</div>
+      </div>
+    </div>
+    <div class="avatar" aria-label="Profil">♙</div>
+  </header>
+
+  <div class="eyebrow">Votre espace jeux</div>
+  <h1>La chance se prépare.<br><span>À vous de jouer.</span></h1>
+  <p class="intro">Retrouvez vos jeux, préparez vos grilles et consultez vos statistiques dans un espace élégant.</p>
+
+  <section class="hero" aria-labelledby="featured-title">
+    <div class="hero-top">
+      <div class="eyebrow">Votre sélection</div>
+      <div class="tag">LOTO SAID</div>
+    </div>
+    <div class="draw-title" id="featured-title">Ma grille du jour</div>
+    <div class="draw-note">Exemple visuel · Nombres de démonstration</div>
+    <div class="balls" aria-label="Exemple de numéros">
+      <div class="ball">7</div>
+      <div class="ball">14</div>
+      <div class="ball">23</div>
+      <div class="ball">36</div>
+      <div class="ball">42</div>
+      <div class="ball star">★</div>
+    </div>
+    <button class="primary" id="generate">✦ &nbsp; Générer une grille de démonstration</button>
+    <div class="toast" id="message" aria-live="polite"></div>
+    <p class="disclaimer">Ces numéros sont générés aléatoirement pour la maquette. Ils ne prédisent pas les résultats et n'augmentent pas les chances de gagner.</p>
+  </section>
+
+  <div class="section-head">
+    <h2>Choisir mon jeu</h2>
+    <button class="small-link" id="all-games">Voir les jeux ↗</button>
+  </div>
+  <section class="games" aria-label="Jeux disponibles">
+    <button class="game active" data-game="Loto">
+      <div class="game-icon">◉</div>
+      <strong>LOTO</strong>
+      <small>Préparer une grille<br>et consulter les résultats</small>
+    </button>
+    <button class="game" data-game="EuroMillions">
+      <div class="game-icon">✦</div>
+      <strong>EUROMILLIONS</strong>
+      <small>Numéros et étoiles<br>dans un univers premium</small>
+    </button>
+    <button class="game" data-game="EuroDreams">
+      <div class="game-icon">☾</div>
+      <strong>EURODREAMS</strong>
+      <small>Retrouver votre espace<br>de jeu</small>
+    </button>
+    <button class="game" data-game="Statistiques">
+      <div class="game-icon">▥</div>
+      <strong>STATISTIQUES</strong>
+      <small>Explorer les données<br>de vos grilles</small>
+    </button>
+  </section>
+
+  <div class="section-head">
+    <h2>Mon espace</h2>
+    <span class="eyebrow">APERÇU</span>
+  </div>
+  <section class="stats">
+    <div class="stat">
+      <div class="stat-label">Grilles préparées</div>
+      <div class="stat-value">—</div>
+      <div class="stat-note">Données à connecter</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Résultats</div>
+      <div class="stat-value">—</div>
+      <div class="stat-note">Données à connecter</div>
+    </div>
+  </section>
+  <p class="footer-note">MAQUETTE DE PRÉSENTATION · Les résultats et statistiques réels ne sont pas connectés dans cette version.</p>
+</main>
+
+<nav class="nav" aria-label="Navigation principale">
+  <button class="active" data-tab="Accueil"><span>⌂</span>Accueil</button>
+  <button data-tab="Mes grilles"><span>▦</span>Mes grilles</button>
+  <button data-tab="Résultats"><span>◷</span>Résultats</button>
+  <button data-tab="Profil"><span>♙</span>Profil</button>
+</nav>
+
+<script>
+const message = document.getElementById('message');
+const balls = document.querySelector('.balls');
+
+document.getElementById('generate').addEventListener('click', () => {
+  const numbers = [];
+  while (numbers.length < 5) {
+    const n = Math.floor(Math.random() * 49) + 1;
+    if (!numbers.includes(n)) numbers.push(n);
+  }
+  numbers.sort((a,b) => a-b);
+  balls.innerHTML = numbers.map(n => `<div class="ball">${n}</div>`).join('')
+    + '<div class="ball star">★</div>';
+  message.textContent = 'Grille de démonstration générée.';
+});
+
+document.querySelectorAll('.game').forEach(button => {
+  button.addEventListener('click', () => {
+    document.querySelectorAll('.game').forEach(b => b.classList.remove('active'));
+    button.classList.add('active');
+    message.textContent = 'Sélection de démonstration : ' + button.dataset.game + '.';
+  });
+});
+
+document.querySelectorAll('.nav button').forEach(button => {
+  button.addEventListener('click', () => {
+    document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+    button.classList.add('active');
+    message.textContent = 'Maquette : section « ' + button.dataset.tab + ' » sélectionnée.';
+  });
+});
+
+document.getElementById('all-games').addEventListener('click', () => {
+  document.querySelector('.games').scrollIntoView({behavior:'smooth',block:'center'});
+});
+</script>
+</body>
+</html>
