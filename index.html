@@ -92,10 +92,30 @@ function registerSavedAsPlayed(i){
  savePlayed(list);alert('Grille ajoutée au suivi des grilles jouées. Aucun gain n’est confirmé à ce stade.');pg('played',document.querySelectorAll('.nav button')[4]);
 }
 function fdj(){let a=[...rows()].reverse().slice(0,15);main.innerHTML=`<section class="card"><h1>🏆 Historique des tirages</h1><p>Voici les 15 tirages les plus récents présents dans la base locale de cette version.</p><details class="info-box"><summary>Comment lire l’historique ?</summary><p>Chaque carte affiche la date et les numéros enregistrés pour ce tirage. Les données visibles dépendent du fichier historique inclus dans l’application et peuvent ne pas être les résultats les plus récents disponibles officiellement. Vérifie toujours les résultats auprès de l’opérateur officiel avant de jouer.</p></details></section>`+a.map(r=>`<section class="card"><b>${fmt(r.date)}</b><div class="balls">${r.nums.map(n=>`<span class="ball">${n}</span>`).join('')}${r.bonus.map(n=>`<span class="ball ${game==='loto'?'chance':'star'}">${n}</span>`).join('')}</div></section>`).join('')}
+function nextDrawDate(days){
+  // Renvoie le prochain jour de tirage strictement après aujourd’hui,
+  // afin d’éviter d’afficher un tirage déjà passé dans la journée.
+  const d=new Date();
+  d.setHours(12,0,0,0);
+  for(let i=1;i<=7;i++){
+    const candidate=new Date(d);
+    candidate.setDate(d.getDate()+i);
+    if(days.includes(candidate.getDay())) return candidate;
+  }
+  return new Date(d.getTime()+7*86400000);
+}
+function drawDayLabel(date){
+  return new Intl.DateTimeFormat('fr-FR',{weekday:'long'}).format(date);
+}
+function drawDateLabel(date){
+  return new Intl.DateTimeFormat('fr-FR',{day:'numeric',month:'short',year:'numeric'}).format(date).replace(/\\./g,'');
+}
 function home(){
   pill.textContent='INFO';
-  const lotoNext='Samedi', lotoDate='10 oct. 2026';
-  const euroNext='Vendredi', euroDate='9 oct. 2026';
+  const lotoDraw=nextDrawDate([1,3,6]); // lundi, mercredi, samedi
+  const euroDraw=nextDrawDate([2,5]); // mardi, vendredi
+  const lotoNext=drawDayLabel(lotoDraw), lotoDate=drawDateLabel(lotoDraw);
+  const euroNext=drawDayLabel(euroDraw), euroDate=drawDateLabel(euroDraw);
   main.innerHTML=`<section class="hero"><div class="hero-kicker">VOTRE ESPACE JEUX</div><h1>La chance se prépare.<br>À vous de jouer.</h1><p>ANALYSES • STATISTIQUES • PRÉDICTIONS</p></section>
   <section class="games">
     <div class="card draw-card"><div class="draw-logo"><span class="lotto">L</span><span class="red">O</span><span class="red">T</span><span class="red">O</span></div><div class="draw-label">Prochain tirage</div><div class="draw-day">${lotoNext}</div><div class="draw-date">${lotoDate}</div><button class="btn main" onclick="pg('grid',document.querySelector('.nav button'))">Mes numéros　 ❯</button></div>
