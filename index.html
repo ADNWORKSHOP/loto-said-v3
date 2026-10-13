@@ -126,6 +126,19 @@ input[type=date]{color-scheme:dark}
 .account-status{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:7px 10px;background:var(--card);color:var(--gold);font-size:11px;font-weight:700}
 .auth-note{display:block;padding:12px 14px;margin-top:12px;border-radius:12px;background:var(--field);border:1px solid var(--line);color:var(--muted);font-size:12.5px;line-height:1.5}
 .auth-ok{color:#4ADE80}.auth-error{color:#FB7185}
+.seg.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.auth-h{margin:20px 0 4px;font-size:15px;font-weight:700;color:var(--gold2)}
+.auth-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.auth-check{display:flex!important;align-items:center;gap:10px;min-height:44px;margin:0!important;text-transform:none;letter-spacing:0;font-size:14px!important;color:var(--muted);cursor:pointer}
+.auth-check input{width:22px;min-height:22px;height:22px;padding:0;margin:0;-webkit-appearance:checkbox;appearance:auto;accent-color:var(--gold)}
+.auth-id{display:flex;align-items:center;gap:12px;margin-top:14px;padding:12px;border-radius:14px;background:var(--field);border:1px solid var(--line)}
+.auth-id b{display:block;font-size:16px}.auth-id small{display:block;color:var(--muted);font-size:12.5px;word-break:break-all}
+.auth-avatar{flex:none;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#0B1C38;font-weight:800}
+.auth-steps{margin:10px 0 4px;padding-left:20px;color:var(--muted);font-size:14px;line-height:1.6}
+.btn[aria-busy=true]{opacity:.75}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation-duration:2s}}
 @media(max-width:360px){.app{padding-left:12px;padding-right:12px}.brand{font-size:15px}.nav button{font-size:8.5px}.ball{width:36px;height:36px;font-size:14px}.draw-card .ball{width:28px;height:28px;font-size:12px}}
 @media(prefers-reduced-motion:reduce){main>*{animation:none}*{transition:none!important}}
 .checks{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px}
@@ -157,107 +170,204 @@ function supabaseReady(){
 }
 // Session conservée dans le stockage local du navigateur et renouvelée automatiquement.
 // Flux « implicit » : le lien e-mail fonctionne même s’il s’ouvre dans un autre navigateur que celui de la demande.
+// Lu avant la création du client : Supabase nettoie ensuite l’URL du lien e-mail.
+const REDIRECT_URL = location.origin + location.pathname;
+const AUTH_REDIRECT = window.AccountCore ? AccountCore.parseAuthRedirect(location.hash, location.search) : {present:false};
 if(supabaseReady()) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, flowType:"implicit"}
 });
 function escAuth(v){return String(v||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function lastEmail(){return localStorage.getItem(LAST_EMAIL_KEY)||"";}
 function currentAccountState(){return AccountCore.accountState(authUser,{expired:localStorage.getItem(EXPIRED_KEY)==="1"});}
-function authMessage(message){
+let authDraft = {firstName:"", lastName:"", email:""}, lastSelfUpdate = 0;
+function authMessage(message,isError){
   if(!message)return "";
-  const tone=/^Erreur|^Aucun|^Trop|^Code|^Adresse/.test(message)?"auth-error":"auth-ok";
-  return `<p class="auth-note ${tone}" role="status">${escAuth(message)}</p>`;
+  const error=isError===undefined?/^Erreur|^Aucun|^Trop|^Adresse e-mail (invalide|pas|refusée)|^E-mail ou|^Mot de passe trop|^Les deux|^Lien|^Connexion internet|^Un compte|^Session|^Saisissez|^Le nouveau/.test(message):isError;
+  return `<p class="auth-note ${error?"auth-error":"auth-ok"}" role="${error?"alert":"status"}">${escAuth(message)}</p>`;
 }
 function statusBadge(state){
   const L={signed_in:["Connecté","auth-ok"],email_unconfirmed:["Adresse e-mail à confirmer","auth-error"],expired:["Session expirée","auth-error"],signed_out:["Non connecté",""]}[state];
   return `<p class="auth-note ${L[1]}" data-account-state="${state}"><b>Statut :</b> ${L[0]}</p>`;
 }
-function setAuthMode(m){authMode=m;pendingEmail="";accountPage();}
-function signedInView(){
-  const p=AccountCore.profileFromUser(authUser);
-  return `${statusBadge(currentAccountState())}
-    <p><b>Adresse e-mail :</b> ${escAuth(p.email)}<br><b>Confirmation :</b> ${p.emailConfirmed?"adresse confirmée":"en attente de confirmation"}</p>
-    <form class="auth-form" onsubmit="saveProfile(event)">
-      <div><label for="firstName">Prénom</label><input id="firstName" autocomplete="given-name" maxlength="80" value="${escAuth(p.firstName)}" placeholder="Votre prénom"></div>
-      <div><label for="lastName">Nom</label><input id="lastName" autocomplete="family-name" maxlength="80" value="${escAuth(p.lastName)}" placeholder="Votre nom"></div>
-      <button class="btn" type="submit">Enregistrer mon profil</button>
+function setAuthMode(m){authMode=m;accountPage();}
+function field(id){const el=document.getElementById(id);return el?el.value:"";}
+function busy(btn,label){if(!btn)return;btn.disabled=true;btn.setAttribute("aria-busy","true");btn.innerHTML=`<span class="spin" aria-hidden="true"></span>${escAuth(label)}`;}
+function submitBtn(e){return e.submitter||e.target.querySelector("button[type=submit]");}
+async function authCall(fn){try{return await fn();}catch(err){return {data:null,error:err};}}
+function authFail(msg){accountPage(msg,true);}
+function sessionLost(){authUser=null;cloudLoaded=false;authMode="signin";localStorage.setItem(EXPIRED_KEY,"1");}
+function emailInput(value){return `<div><label for="accountEmail">Adresse e-mail</label><input id="accountEmail" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" maxlength="254" required value="${value}" placeholder="vous@exemple.fr"></div>`;}
+function pwdInput(id,label,auto){return `<div><label for="${id}">${label}</label><input id="${id}" data-pwd type="password" autocomplete="${auto}" minlength="${AccountCore.PASSWORD_MIN}" maxlength="${AccountCore.PASSWORD_MAX}" required placeholder="${AccountCore.PASSWORD_MIN} caractères min., lettres et chiffres"></div>`;}
+function showPwdToggle(){return `<label class="auth-check"><input type="checkbox" onchange="this.form.querySelectorAll('input[data-pwd]').forEach(i=>i.type=this.checked?'text':'password')"><span>Afficher le mot de passe</span></label>`;}
+function nameInputs(first,last){return `<div class="auth-pair"><div><label for="firstName">Prénom</label><input id="firstName" autocomplete="given-name" maxlength="80" required value="${escAuth(first)}" placeholder="Votre prénom"></div>
+      <div><label for="lastName">Nom</label><input id="lastName" autocomplete="family-name" maxlength="80" required value="${escAuth(last)}" placeholder="Votre nom"></div></div>`;}
+function newPasswordView(){
+  return `<h2 class="auth-h">Nouveau mot de passe</h2>
+    <p>Ce mot de passe servira à vous connecter sur tous vos appareils, y compris l’application installée sur l’écran d’accueil.</p>
+    <form class="auth-form" onsubmit="saveNewPassword(event)">
+      ${pwdInput("newPassword","Nouveau mot de passe","new-password")}
+      ${pwdInput("newPassword2","Confirmez le mot de passe","new-password")}
+      ${showPwdToggle()}
+      <button class="btn main" type="submit">Enregistrer le mot de passe</button>
     </form>
-    <p>${cloudLoaded?"Vos grilles, grilles jouées et cagnottes sont synchronisées avec votre compte.":"Données du compte non chargées"+(cloudError?" ("+escAuth(cloudError)+")":"")+" : vos données locales sont conservées et aucune sauvegarde cloud ne sera écrasée."}</p>
-    <button class="btn main" onclick="syncCloudNow()">Synchroniser maintenant</button>
-    <button class="btn" onclick="signOutAccount()">Se déconnecter</button>`;
+    <button class="btn" type="button" onclick="setAuthMode('signin')">Annuler</button>`;
+}
+function signedInView(){
+  const state=currentAccountState();
+  if(authMode==="newpass")return statusBadge(state)+newPasswordView();
+  const p=AccountCore.profileFromUser(authUser);
+  const name=[p.firstName,p.lastName].filter(Boolean).join(" ");
+  const initials=((p.firstName[0]||"")+(p.lastName[0]||"")||p.email[0]||"?").toUpperCase();
+  return `${statusBadge(state)}
+    <div class="auth-id"><span class="auth-avatar" aria-hidden="true">${escAuth(initials)}</span><div><b>${escAuth(name||"Mon compte")}</b><small>${escAuth(p.email)} • ${p.emailConfirmed?"adresse confirmée":"confirmation en attente"}</small></div></div>
+    ${authUser.new_email?`<p class="auth-note">Changement d’adresse en attente : confirmez-le avec le lien envoyé à <b>${escAuth(authUser.new_email)}</b>.</p>`:""}
+    <h2 class="auth-h">Mes coordonnées</h2>
+    <form class="auth-form" onsubmit="saveProfile(event)">
+      ${nameInputs(p.firstName,p.lastName)}
+      <div><label for="profileEmail">Adresse e-mail</label><input id="profileEmail" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" maxlength="254" required value="${escAuth(p.email)}"></div>
+      <button class="btn main" type="submit">Enregistrer mes coordonnées</button>
+    </form>
+    <h2 class="auth-h">Mes données</h2>
+    <p>${cloudLoaded?"Vos grilles, grilles jouées et cagnottes sont enregistrées dans votre compte.":"Données du compte non chargées"+(cloudError?" ("+escAuth(cloudError)+")":"")+" : vos données locales sont conservées et aucune sauvegarde cloud ne sera écrasée."}</p>
+    <button class="btn" type="button" onclick="syncCloudNow(this)">Synchroniser maintenant</button>
+    <button class="btn" type="button" onclick="setAuthMode('newpass')">Modifier mon mot de passe</button>
+    <button class="btn" type="button" onclick="signOutAccount(this)">Se déconnecter</button>`;
 }
 function signedOutView(state){
-  const email=escAuth(pendingEmail||lastEmail());
-  if(pendingEmail)return `${statusBadge(state)}
-    <h2>Vérifiez votre boîte e-mail</h2>
-    <p>Un e-mail a été envoyé à <b>${escAuth(pendingEmail)}</b>. Ouvrez le lien sur cet appareil, ou saisissez ci-dessous le code à 6 chiffres s’il figure dans l’e-mail (pratique si l’application est installée sur l’écran d’accueil de l’iPhone).</p>
-    <form class="auth-form" onsubmit="verifyCode(event)">
-      <div><label for="otpCode">Code reçu par e-mail</label><input id="otpCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,12}" maxlength="12" required placeholder="123456"></div>
-      <button class="btn main" type="submit">Valider le code</button>
+  const email=escAuth(authDraft.email||pendingEmail||lastEmail());
+  if(authMode==="pending")return `${statusBadge("email_unconfirmed")}
+    <h2 class="auth-h">Confirmez votre adresse e-mail</h2>
+    <p>Un e-mail a été envoyé à <b>${escAuth(pendingEmail)}</b>. Il contient un <b>lien de confirmation</b> (aucun code à saisir).</p>
+    <ol class="auth-steps">
+      <li>Ouvrez l’e-mail et appuyez sur le lien de confirmation.</li>
+      <li>Revenez dans Loto Votre Chance.</li>
+      <li>Connectez-vous une fois avec votre e-mail et votre mot de passe : vous restez ensuite connecté sur cet appareil.</li>
+    </ol>
+    <button class="btn main" type="button" onclick="setAuthMode('signin')">J’ai confirmé, me connecter</button>
+    <button class="btn" type="button" onclick="resendConfirmation(this)">Renvoyer l’e-mail de confirmation</button>
+    <p class="note">Rien reçu après quelques minutes ? Vérifiez les courriers indésirables.</p>`;
+  if(authMode==="forgot")return `${statusBadge(state)}
+    <h2 class="auth-h">Mot de passe oublié</h2>
+    <p>Vous recevrez un lien pour choisir un nouveau mot de passe. Votre compte et vos grilles sont conservés.</p>
+    <form class="auth-form" onsubmit="sendReset(event)">
+      ${emailInput(email)}
+      <button class="btn main" type="submit">Recevoir le lien</button>
     </form>
-    <button class="btn" onclick="setAuthMode('${authMode}')">Changer d’adresse ou renvoyer</button>`;
+    <button class="btn" type="button" onclick="setAuthMode('signin')">Retour à la connexion</button>`;
   const signup=authMode==="signup";
   return `${statusBadge(state)}
-    ${state==="expired"?`<p>Votre session a expiré sur cet appareil. Votre compte et vos données sont conservés : reconnectez-vous avec la même adresse e-mail, sans ressaisir vos informations.</p>`:""}
-    <div class="seg" role="group" aria-label="Type d’accès">
-      <button class="tab ${signup?"":"on"}" aria-pressed="${!signup}" onclick="setAuthMode('signin')">Se connecter</button>
-      <button class="tab ${signup?"on":""}" aria-pressed="${signup}" onclick="setAuthMode('signup')">Créer un compte</button>
+    ${state==="expired"?`<p>Votre session a expiré sur cet appareil. Votre compte et vos données sont conservés : reconnectez-vous, sans ressaisir vos informations.</p>`:""}
+    <div class="seg two" role="group" aria-label="Type d’accès">
+      <button class="tab ${signup?"":"on"}" type="button" aria-pressed="${!signup}" onclick="setAuthMode('signin')">Se connecter</button>
+      <button class="tab ${signup?"on":""}" type="button" aria-pressed="${signup}" onclick="setAuthMode('signup')">Créer un compte</button>
     </div>
-    <p>${signup?"Création unique : votre prénom et votre nom sont enregistrés dans votre compte.":"Compte déjà créé : seule votre adresse e-mail est demandée."} Sans mot de passe, un lien sécurisé vous est envoyé.</p>
-    <form class="auth-form" onsubmit="sendMagicLink(event)">
-      ${signup?`<div><label for="firstName">Prénom</label><input id="firstName" autocomplete="given-name" maxlength="80" required placeholder="Votre prénom"></div>
-      <div><label for="lastName">Nom</label><input id="lastName" autocomplete="family-name" maxlength="80" required placeholder="Votre nom"></div>`:""}
-      <div><label for="accountEmail">Adresse e-mail</label><input id="accountEmail" type="email" autocomplete="email" maxlength="254" required value="${email}" placeholder="vous@exemple.fr"></div>
-      <button class="btn main" type="submit">${signup?"Créer mon compte":"Recevoir mon lien de connexion"}</button>
+    <form class="auth-form" onsubmit="${signup?"signUpAccount":"signInAccount"}(event)">
+      ${signup?nameInputs(authDraft.firstName,authDraft.lastName):""}
+      ${emailInput(email)}
+      ${pwdInput("accountPassword","Mot de passe",signup?"new-password":"current-password")}
+      ${signup?pwdInput("accountPassword2","Confirmez le mot de passe","new-password"):""}
+      ${showPwdToggle()}
+      <button class="btn main" type="submit">${signup?"Créer mon compte":"Se connecter"}</button>
     </form>
-    ${signup?`<p class="note">Si un compte existe déjà avec cette adresse, l’e-mail vous connecte à ce compte existant : aucun doublon n’est créé.</p>`:""}`;
+    ${signup?`<p class="note">Un lien de confirmation vous sera envoyé par e-mail. Le mot de passe est chiffré par Supabase : il n’est jamais enregistré dans l’application.</p>`
+      :`<button class="btn" type="button" onclick="setAuthMode('forgot')">Mot de passe oublié ?</button>
+    <p class="note">Compte créé avec un lien de connexion, sans mot de passe ? Choisissez « Mot de passe oublié » avec la même adresse : vous retrouverez ce compte et vos grilles.</p>`}`;
 }
-function accountPage(message=""){
+function accountPage(message="",isError){
   const ready=supabaseReady(), state=currentAccountState(), signed=!!authUser;
-  main.innerHTML=`<section class="card">${head('user','Espace personnel','Votre compte')}<p>Retrouvez vos grilles après fermeture de l’application et sur vos autres appareils.</p></section>
+  main.innerHTML=`<section class="card">${head('user','Espace personnel','Mon compte')}<p>Votre compte conserve vos coordonnées, vos grilles et vos gains, même après fermeture de l’application.</p></section>
   <section class="card">
-    ${!ready?`<p class="auth-note auth-error">Configuration requise : le service de comptes n’a pas pu être chargé. Vérifiez la connexion internet puis rechargez la page.</p>`:signed?signedInView():signedOutView(state)}
-    ${authMessage(message)}
-    <p class="note">Sur iPhone, Safari et l’application ajoutée à l’écran d’accueil ont des stockages séparés : connectez-vous une fois dans chacun.</p>
-  </section>`;
+    ${authMessage(message,isError)}
+    ${!ready?`<p class="auth-note auth-error">Le service de comptes n’a pas pu être chargé. Vérifiez la connexion internet puis rechargez la page.</p>`:signed?signedInView():signedOutView(state)}
+  </section>
+  <section class="card"><p class="note"><b>Sur iPhone :</b> les liens reçus par e-mail s’ouvrent dans Safari, qui a un stockage séparé de l’application ajoutée à l’écran d’accueil. Après confirmation, connectez-vous une fois avec votre mot de passe dans l’application installée : la session y reste ensuite active.</p></section>`;
   pill.textContent=signed?"MON COMPTE":state==="expired"?"RECONNEXION":"COMPTE";
 }
-async function sendMagicLink(e){
+async function signInAccount(e){
   e.preventDefault();
-  if(!sb){accountPage("Erreur : l’authentification n’est pas disponible.");return;}
-  const email=AccountCore.normalizeEmail(document.getElementById("accountEmail").value);
-  if(!AccountCore.isValidEmail(email)){accountPage("Erreur : adresse e-mail invalide.");return;}
-  const signup=authMode==="signup";
-  const options={emailRedirectTo:location.origin+location.pathname, shouldCreateUser:signup};
-  if(signup){
-    const first_name=AccountCore.cleanName(document.getElementById("firstName").value);
-    const last_name=AccountCore.cleanName(document.getElementById("lastName").value);
-    if(!first_name||!last_name){accountPage("Erreur : prénom et nom obligatoires.");return;}
-    options.data={first_name,last_name};
+  if(!sb)return authFail("Erreur : l’authentification n’est pas disponible.");
+  const email=AccountCore.normalizeEmail(field("accountEmail")), password=field("accountPassword");
+  authDraft.email=email;
+  if(!AccountCore.isValidEmail(email))return authFail("Adresse e-mail invalide.");
+  if(!password)return authFail("Saisissez votre mot de passe.");
+  busy(submitBtn(e),"Connexion…");
+  const {error}=await authCall(()=>sb.auth.signInWithPassword({email,password}));
+  if(error){
+    if(AccountCore.authErrorKind(error)==="email_not_confirmed"){pendingEmail=email;authMode="pending";}
+    return authFail(AccountCore.authErrorMessage(error));
   }
-  const btn=e.submitter||e.target.querySelector("button[type=submit]");if(btn)btn.disabled=true;
-  const {error}=await sb.auth.signInWithOtp({email, options});
-  if(error){accountPage(AccountCore.signInErrorMessage(error,authMode));return;}
   localStorage.setItem(LAST_EMAIL_KEY,email);
-  pendingEmail=email;
-  accountPage("E-mail envoyé.");
+  // La suite (chargement des données, affichage) est gérée par onAuthStateChange (SIGNED_IN).
 }
-async function verifyCode(e){
+async function signUpAccount(e){
   e.preventDefault();
-  const token=document.getElementById("otpCode").value.replace(/\s/g,"");
-  if(!AccountCore.isValidOtpCode(token)){accountPage("Code invalide : saisissez les chiffres reçus par e-mail.");return;}
-  const {error}=await sb.auth.verifyOtp({email:pendingEmail, token, type:"email"});
-  if(error){accountPage(AccountCore.verifyErrorMessage(error));return;}
-  pendingEmail="";
+  if(!sb)return authFail("Erreur : l’authentification n’est pas disponible.");
+  const firstName=AccountCore.cleanName(field("firstName")), lastName=AccountCore.cleanName(field("lastName"));
+  const email=AccountCore.normalizeEmail(field("accountEmail")), password=field("accountPassword");
+  authDraft={firstName,lastName,email};
+  if(!firstName||!lastName)return authFail("Erreur : prénom et nom obligatoires.");
+  if(!AccountCore.isValidEmail(email))return authFail("Adresse e-mail invalide.");
+  const problem=AccountCore.passwordProblem(password,field("accountPassword2"));
+  if(problem)return authFail(problem);
+  busy(submitBtn(e),"Création du compte…");
+  const {data,error}=await authCall(()=>sb.auth.signUp({email,password,options:{emailRedirectTo:REDIRECT_URL,data:{first_name:firstName,last_name:lastName}}}));
+  if(error)return authFail(AccountCore.authErrorMessage(error));
+  localStorage.setItem(LAST_EMAIL_KEY,email);
+  if(AccountCore.isExistingAccountSignup(data)){authMode="signin";return authFail(AccountCore.authErrorMessage({code:"user_already_exists"}));}
+  if(data?.session)return;
+  pendingEmail=email;authMode="pending";
+  accountPage("Compte créé. Confirmez votre adresse e-mail pour l’activer.",false);
+}
+async function resendConfirmation(btn){
+  const email=pendingEmail||authDraft.email||lastEmail();
+  if(!sb||!AccountCore.isValidEmail(email)){authMode="signin";return authFail("Saisissez votre adresse e-mail et connectez-vous.");}
+  busy(btn,"Envoi…");
+  const {error}=await authCall(()=>sb.auth.resend({type:"signup",email,options:{emailRedirectTo:REDIRECT_URL}}));
+  if(error)return authFail(AccountCore.authErrorMessage(error));
+  accountPage("Nouvel e-mail de confirmation envoyé à "+email+".",false);
+}
+async function sendReset(e){
+  e.preventDefault();
+  if(!sb)return authFail("Erreur : l’authentification n’est pas disponible.");
+  const email=AccountCore.normalizeEmail(field("accountEmail"));
+  authDraft.email=email;
+  if(!AccountCore.isValidEmail(email))return authFail("Adresse e-mail invalide.");
+  busy(submitBtn(e),"Envoi…");
+  const {error}=await authCall(()=>sb.auth.resetPasswordForEmail(email,{redirectTo:REDIRECT_URL}));
+  if(error)return authFail(AccountCore.authErrorMessage(error));
+  localStorage.setItem(LAST_EMAIL_KEY,email);
+  authMode="signin";
+  accountPage("Si un compte existe pour "+email+", un lien vient d’être envoyé. Ouvrez-le pour choisir votre nouveau mot de passe.",false);
+}
+async function saveNewPassword(e){
+  e.preventDefault();
+  const password=field("newPassword");
+  const problem=AccountCore.passwordProblem(password,field("newPassword2"));
+  if(problem)return authFail(problem);
+  if(!sb||!authUser){authMode="forgot";return authFail("Session expirée : demandez un nouveau lien de réinitialisation.");}
+  busy(submitBtn(e),"Enregistrement…");
+  lastSelfUpdate=Date.now();
+  const {error}=await authCall(()=>sb.auth.updateUser({password}));
+  if(error){if(AccountCore.authErrorKind(error)==="session")sessionLost();return authFail(AccountCore.authErrorMessage(error));}
+  authMode="signin";
+  accountPage("Mot de passe enregistré. Utilisez-le pour vous connecter sur vos autres appareils.",false);
 }
 async function saveProfile(e){
   e.preventDefault();
-  if(!sb||!authUser)return;
-  const first_name=AccountCore.cleanName(document.getElementById("firstName").value);
-  const last_name=AccountCore.cleanName(document.getElementById("lastName").value);
-  const {data,error}=await sb.auth.updateUser({data:{first_name,last_name}});
-  if(!error&&data?.user)authUser=data.user;
-  accountPage(error?("Erreur : "+error.message):"Profil enregistré dans votre compte.");
+  if(!sb||!authUser)return authFail("Session expirée. Reconnectez-vous pour continuer : vos données sont conservées.");
+  const first_name=AccountCore.cleanName(field("firstName")), last_name=AccountCore.cleanName(field("lastName"));
+  const email=AccountCore.normalizeEmail(field("profileEmail"));
+  if(!first_name||!last_name)return authFail("Erreur : prénom et nom obligatoires.");
+  if(!AccountCore.isValidEmail(email))return authFail("Adresse e-mail invalide.");
+  const emailChanged=email!==AccountCore.normalizeEmail(authUser.email);
+  const changes={data:{first_name,last_name}};
+  if(emailChanged)changes.email=email;
+  busy(submitBtn(e),"Enregistrement…");
+  lastSelfUpdate=Date.now();
+  const {data,error}=await authCall(()=>sb.auth.updateUser(changes,{emailRedirectTo:REDIRECT_URL}));
+  if(error){if(AccountCore.authErrorKind(error)==="session")sessionLost();return authFail(AccountCore.authErrorMessage(error));}
+  if(data?.user)authUser=data.user;
+  accountPage(emailChanged?"Coordonnées enregistrées. Un lien de confirmation a été envoyé à "+email+" : la nouvelle adresse sera active après confirmation.":"Coordonnées enregistrées dans votre compte.",false);
 }
 function applyLocalState(s){
   saved=s.saved;
@@ -281,21 +391,25 @@ async function writeCloud(){
   const payload={saved,played:getPlayed(),pots:getPots(),updated_at:new Date().toISOString()};
   return sb.from("user_app_data").upsert({user_id:authUser.id,data:payload},{onConflict:"user_id"});
 }
-async function syncCloudNow(){
+async function syncCloudNow(btn){
   if(!sb||!authUser){accountPage("Erreur : connectez-vous d’abord.");return;}
-  if(!cloudLoaded&&!(await loadCloudState())){accountPage("Erreur : impossible de charger le compte, réessayez dans un instant.");return;}
-  const {error}=await writeCloud();
-  accountPage(error?("Erreur de synchronisation : "+error.message):"Synchronisation terminée.");
+  busy(btn,"Synchronisation…");
+  if(!cloudLoaded&&!(await authCall(loadCloudState))){accountPage("Erreur : impossible de charger le compte, réessayez dans un instant.");return;}
+  const {error}=await authCall(writeCloud);
+  if(error&&AccountCore.authErrorKind(error)==="session")sessionLost();
+  accountPage(error?("Erreur de synchronisation : "+AccountCore.authErrorMessage(error)):"Synchronisation terminée.");
 }
 async function persistCloudState(){
   if(!sb||!AccountCore.canPersist({signedIn:!!authUser,cloudLoaded}))return;
   const {error}=await writeCloud();
   if(error)console.error("Sauvegarde cloud échouée:",error);
 }
-async function signOutAccount(){
+async function signOutAccount(btn){
+  busy(btn,"Déconnexion…");
   voluntarySignOut=true;
   // scope local : ne déconnecte que cet appareil, les autres appareils restent connectés.
-  if(sb)await sb.auth.signOut({scope:"local"});
+  if(sb)await authCall(()=>sb.auth.signOut({scope:"local"}));
+  authMode="signin";
   authUser=null;cloudLoaded=false;saved=[];
   localStorage.setItem("ls_saved","[]");localStorage.setItem("ls_played","[]");localStorage.setItem("ls_pots","[]");
   localStorage.removeItem("lvc_cloud_user");localStorage.removeItem(EXPIRED_KEY);
@@ -309,29 +423,37 @@ function markSignedIn(user){
 }
 async function initAccount(){
   if(!sb)return;
-  const urlHadAuth=/access_token=|error_description=|token_hash=/.test(location.hash+location.search);
-  const urlError=new URLSearchParams(location.hash.slice(1)).get("error_description");
-  const {data}=await sb.auth.getSession();
+  const {data,error}=await authCall(()=>sb.auth.getSession());
+  if(error)console.error("Lecture de la session:",error);
+  if(AUTH_REDIRECT.present)history.replaceState(null,"",REDIRECT_URL);
   const user=data?.session?.user||null;
-  if(user){markSignedIn(user);await loadCloudState();if(urlHadAuth)accountPage("Connexion réussie.");}
-  else if(urlError)accountPage("Erreur : lien de connexion invalide ou expiré. Demandez un nouvel e-mail.");
+  if(user){
+    markSignedIn(user);
+    await loadCloudState();
+    if(AUTH_REDIRECT.type==="recovery"){authMode="newpass";accountPage("Lien validé : choisissez votre nouveau mot de passe.",false);}
+    else if(AUTH_REDIRECT.type==="signup")accountPage("Adresse e-mail confirmée : votre compte est actif et vous êtes connecté.",false);
+    else if(AUTH_REDIRECT.type==="email_change")accountPage("Nouvelle adresse e-mail confirmée.",false);
+    else if(AUTH_REDIRECT.present)accountPage("Connexion réussie.",false);
+  }
+  else if(AUTH_REDIRECT.error){authMode="signin";accountPage(AccountCore.redirectErrorMessage(AUTH_REDIRECT),true);}
+  else if(AUTH_REDIRECT.present){authMode="signin";accountPage("Lien traité. Connectez-vous avec votre e-mail et votre mot de passe.",false);}
   // Traitement différé : ne pas appeler Supabase dans le callback (verrou interne de session).
   sb.auth.onAuthStateChange((event,session)=>{
     const next=session?.user||null;
     const action=AccountCore.authAction(event,{voluntary:voluntarySignOut,wasSignedIn:!!authUser,sameUser:!!(authUser&&next&&authUser.id===next.id)});
     if(next)authUser=next;
     setTimeout(async()=>{
-      if(action==="load"){markSignedIn(next);await loadCloudState();accountPage("Connexion réussie.");}
-      else if(action==="update"&&document.querySelector("[data-account-state]"))accountPage();
+      if(action==="load"){markSignedIn(next);pendingEmail="";authDraft={firstName:"",lastName:"",email:""};if(authMode!=="newpass")authMode="signin";await loadCloudState();accountPage("Connexion réussie : vous restez connecté sur cet appareil.",false);}
+      else if(action==="recovery"){markSignedIn(next);authMode="newpass";await loadCloudState();accountPage("Lien validé : choisissez votre nouveau mot de passe.",false);}
+      else if(action==="update"&&Date.now()-lastSelfUpdate>3000&&document.querySelector("[data-account-state]"))accountPage();
       else if(action==="expired"){
-        authUser=null;cloudLoaded=false;
-        localStorage.setItem(EXPIRED_KEY,"1");
-        accountPage("Votre session a expiré. Reconnectez-vous pour retrouver vos données.");
+        sessionLost();
+        accountPage("Votre session a expiré. Reconnectez-vous pour retrouver vos données.",true);
       }
     },0);
   });
   // Au retour sur l’app (iPhone en arrière-plan), relire la session pour un statut à jour.
-  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")sb.auth.getSession();});
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")authCall(()=>sb.auth.getSession());});
 }
 const DATA=window.LVC_DATA||{loto:[],euro:[]};
 C={loto:{n:'LOTO',max:49,bmax:10,bl:'Chance'},euro:{n:'EUROMILLIONS',max:50,bmax:12,bl:'Étoiles'}};let game=localStorage.ls_game||'loto',win=100,strat='opt',cur=null,saved=JSON.parse(localStorage.ls_saved||'[]');const rows=()=>DATA[game];const cfg=()=>C[game];function fmt(x){return new Date(x+'T12:00:00').toLocaleDateString('fr-FR')}function cnt(a,b=false){let f=Array((b?cfg().bmax:cfg().max)+1).fill(0);a.forEach(r=>(b?r.bonus:r.nums).forEach(n=>f[n]++));return f}function gap(a,b=false){let m=b?cfg().bmax:cfg().max,g=Array(m+1).fill(a.length+1);for(let i=a.length-1;i>=0;i--)(b?a[i].bonus:a[i].nums).forEach(n=>{if(g[n]===a.length+1)g[n]=a.length-1-i});return g}function lateOrder(kind){const lg=StatsEngine.gaps(rows(),game,kind),k=v=>v==null?Infinity:v;return (x,y)=>(k(lg[y])-k(lg[x]))||x-y}function pick(s,a){let f=cnt(a),g=gap(a),arr=Array.from({length:cfg().max},(_,i)=>i+1);if(s==='rnd')return arr.sort(()=>Math.random()-.5).slice(0,5).sort((x,y)=>x-y);if(s==='hot')arr.sort((x,y)=>f[y]-f[x]);else if(s==='cold')arr.sort((x,y)=>f[x]-f[y]);else if(s==='late')arr.sort(lateOrder('main'));else arr.sort((x,y)=>(f[y]*.7+g[y]*.2)-(f[x]*.7+g[x]*.2));let pool=arr.slice(0,Math.min(15,arr.length)),out=[];while(out.length<5&&pool.length){let i=Math.floor(Math.random()*pool.length);out.push(pool.splice(i,1)[0])}return out.sort((x,y)=>x-y)}function bonus(s,a){let f=cnt(a,1),g=gap(a,1),arr=Array.from({length:cfg().bmax},(_,i)=>i+1);if(s==='hot')arr.sort((x,y)=>f[y]-f[x]);else if(s==='cold')arr.sort((x,y)=>f[x]-f[y]);else if(s==='late')arr.sort(lateOrder('bonus'));else if(s==='rnd')return arr.sort(()=>Math.random()-.5).slice(0,game==='loto'?1:2).sort((x,y)=>x-y);else arr.sort((x,y)=>f[y]-f[x]);let k=game==='loto'?1:2,pool=arr.slice(0,Math.min(5,arr.length)),out=[];while(out.length<k&&pool.length){let i=Math.floor(Math.random()*pool.length);out.push(pool.splice(i,1)[0])}return out.sort((x,y)=>x-y)}function score(n,a){let f=cnt(a),ev=n.filter(x=>x%2===0).length,d=new Set(n.map(x=>Math.floor((x-1)/10))).size,sum=n.reduce((a,b)=>a+b,0),target=game==='loto'?125:130,s=55+Math.min(15,d*3)+(ev>=2&&ev<=3?10:3)-Math.abs(sum-target)/5+simp(n,f);return Math.max(0,Math.min(99,Math.round(s)))}function simp(n,f){let mx=Math.max(...f.slice(1));return mx?n.reduce((a,x)=>a+f[x]/mx,0)/n.length*10:0}function gen(s='opt'){strat=s;const avoid=rows().slice(-1).map(d=>d.nums);if(cur&&cur.game===game)avoid.push(cur.nums);const x=GridGenerator.generate(rows(),game,{strategy:s,window:win,count:1,avoid,maxOverlap:3})[0];cur={game,nums:x.nums,bonus:x.bonus,score:x.conformity,strategy:s,checks:x.checks,explanation:x.explanation,date:new Date().toISOString()};multiList=[];grid()}let multiList=[];function multi(){const avoid=rows().slice(-1).map(d=>d.nums);multiList=GridGenerator.generate(rows(),game,{strategy:strat||'opt',window:win,count:5,avoid,maxOverlap:2}).map(x=>({game,nums:x.nums,bonus:x.bonus,score:x.conformity,strategy:x.strategy,checks:x.checks,explanation:x.explanation,date:new Date().toISOString()}));renderMulti()}function renderMulti(){const el=document.getElementById('multi');if(!el)return;el.innerHTML=multiList.length?'<div class="multi">'+multiList.map((x,i)=>'<div class="multi-row"><div class="balls">'+balls(x)+'</div><button class="icon-btn" aria-label="Sauvegarder la grille '+(i+1)+'" onclick="savem('+i+')">'+ic('save')+'</button></div>').join('')+'</div><p class="note">Deux grilles partagent au plus 2 numéros. Méthode : '+lab(strat||'opt')+'.</p>':''}function savem(i){const keep=cur;cur=multiList[i];save();cur=keep}function gridDetails(x){if(!x.checks)return '<div class="score">'+x.score+'<small>/100 · score interne</small></div>';return '<div class="score">'+x.score+'<small> % · conformité structurelle</small></div><ul class="checks">'+x.checks.map(c=>'<li class="'+(c.ok?'':'ko')+'">'+c.label+'</li>').join('')+'</ul><details class="info-box"><summary>Pourquoi ces numéros ?</summary>'+x.explanation.map(t=>'<p>'+t+'</p>').join('')+'</details>'}function lab(s){return ({opt:'LA GRILLE SAID',bal:'GRILLE ÉQUILIBRÉE',hot:'NUMÉROS CHAUDS',cold:'NUMÉROS FROIDS',late:'NUMÉROS EN RETARD',rnd:'HASARD'}[s]||'GRILLE')}function balls(x){return x.nums.map(n=>`<span class="ball">${n}</span>`).join('')+x.bonus.map(n=>`<span class="ball ${game==='loto'?'chance':'star'}">${n}</span>`).join('')}function grid(){pill.textContent=cfg().n;main.innerHTML=`<section class="card">${head('target','Ma grille du jour',cfg().n)}<p>Analyse des tirages historiques intégrés. Les indicateurs décrivent les données passées : ils ne prédisent pas le prochain tirage.</p><details class="info-box"><summary>Comprendre les indicateurs de ma grille</summary><p><b>Conformité structurelle :</b> part des contrôles respectés (somme, parité, petits/grands, dizaines, amplitude, suites) par rapport aux 400 derniers tirages. Ce n’est pas une probabilité de gagner : toutes les combinaisons ont la même chance.</p><p><b>Pairs / impairs :</b> répartition des nombres pairs et impairs dans la grille.</p><p><b>Somme :</b> addition des cinq numéros principaux. Elle permet de comparer la grille aux sommes observées dans l’historique.</p><p><b>Dizaines :</b> nombre de tranches de dix représentées (1–10, 11–20, etc.). Une répartition variée est descriptive, pas plus gagnante.</p></details><div class="games mt"><button class="game ${game==='loto'?'on':''}" aria-pressed="${game==='loto'}" onclick="setg('loto')">LOTO<small>5 + Chance</small></button><button class="game ${game==='euro'?'on':''}" aria-pressed="${game==='euro'}" onclick="setg('euro')">EUROMILLIONS<small>5 + 2 étoiles</small></button></div></section><section class="card"><span class="kicker">${lab(cur.strategy)}</span><div class="balls">${balls(cur)}</div>${gridDetails(cur)}<div class="stats"><div class="stat"><b>${cur.nums.filter(x=>x%2===0).length}/${5-cur.nums.filter(x=>x%2===0).length}</b><span>pairs/impairs</span></div><div class="stat"><b>${cur.nums.reduce((a,b)=>a+b,0)}</b><span>somme</span></div><div class="stat"><b>${new Set(cur.nums.map(x=>Math.floor((x-1)/10))).size}</b><span>dizaines</span></div></div><div class="btn-row"><button class="btn main" onclick="gen('opt')">${ic('refresh')}Nouvelle grille</button><button class="btn" onclick="save()">${ic('save')}Sauvegarder</button></div></section><section class="card"><div class="sec-head">${ic('sliders')}<div><h2>6 stratégies</h2><span>Change la manière de composer la grille</span></div></div><div class="strategies">${[['opt','MIXTE'],['bal','ÉQUILIBRÉE'],['hot','FRÉQUENTS'],['cold','RARES'],['late','RETARD'],['rnd','HASARD']].map(x=>`<button class="game ${strat===x[0]?'on':''}" aria-pressed="${strat===x[0]}" onclick="gen('${x[0]}')">${x[1]}</button>`).join('')}</div><button class="btn mt" onclick="multi()">${ic('refresh')}Proposer 5 grilles variées</button><div id="multi"></div><details class="info-box"><summary>À quoi servent les stratégies ?</summary><p><b>Mixte (LA GRILLE SAID) :</b> pondération légère par fréquence récente et retard, puis contrôle de la structure.</p><p><b>Équilibrée :</b> tous les numéros ont le même poids ; seule la structure est contrôlée.</p><p><b>Fréquents :</b> favorise modérément les numéros sortis plus souvent que l’attendu sur la période choisie.</p><p><b>Rares :</b> favorise modérément les numéros sortis moins souvent que l’attendu.</p><p><b>Retard :</b> met en avant les numéros absents depuis le plus grand nombre de tirages.</p><p><b>Hasard :</b> tirage uniforme sans aucun contrôle, utilisé comme référence dans le backtest.</p><p>Les pondérations sont bornées : aucun numéro n’est exclu ni imposé. Le backtest montre qu’aucune méthode ne fait mieux que le hasard ; elles changent la composition de la grille, pas la probabilité de gagner.</p></details></section><section class="card"><div class="sec-head">${ic('history')}<div><h2>Base de données</h2></div></div><p>Résumé de l’historique actuellement embarqué dans le fichier HTML.</p><div class="stats"><div class="stat"><b>${rows().length.toLocaleString('fr-FR')}</b><span>tirages</span></div><div class="stat"><b>${fmt(rows()[0].date)}</b><span>début</span></div><div class="stat"><b>${fmt(rows().at(-1).date)}</b><span>dernier</span></div></div></section>`}function pct(p){return p==null?'—':p.toLocaleString('fr-FR',{minimumFractionDigits:1,maximumFractionDigits:1})+' %'}function dec1(x){return x.toLocaleString('fr-FR',{minimumFractionDigits:1,maximumFractionDigits:1})}function tieNote(r,unit){if(!r.tiedOutside.length)return '';const v=r.cutoffValue==null?'aucune apparition':r.cutoffValue+' '+unit;return '<p class="metric-help" data-tie>Égalité à la dernière place : '+r.tiedAtCutoff.length+' numéros à '+v+'. Également à égalité, non affichés : '+r.tiedOutside.join(', ')+'.</p>'}function rankT(t,i,l,r,mx,label,unit,cls=''){return rank(t,i,l,r.items.map(x=>[x.n,x.value==null?mx:x.value,label(x.value)]),mx,cls).replace(/<\/section>$/,tieNote(r,unit)+'</section>')}function stats(){const S=StatsEngine.computeStats(rows(),game,win),H=S.history,W=S.window,c=cfg(),seg='<div class="seg" role="group" aria-label="Nombre de tirages analysés">'+[10,25,50,100].map(n=>'<button class="tab '+(win===n?'on':'')+'" aria-pressed="'+(win===n)+'" onclick="setw('+n+')">'+n+'</button>').join('')+'</div>';if(!W.analyzed){main.innerHTML='<section class="card">'+head('stats','Statistiques',c.n)+seg+'<p class="metric-help" data-empty>Aucun tirage disponible pour '+c.n+' : les statistiques ne peuvent pas être calculées.</p></section>';return}const f=S.frequencies.main,g=S.gaps.main,bf=S.frequencies.bonus,bg=S.gaps.bonus,mx=Math.max(...f.slice(1)),gmx=Math.max(1,...g.slice(1).filter(v=>v!=null)),late=v=>v==null?'aucune apparition dans l’historique disponible':v+' tir.',hf=S.historicFrequencies,cmp=S.comparison,lim=H.limits.map(x=>'<p class="metric-help" data-limit>'+x+'</p>').join(''),cal=H.calendarIntervals.length?'<p class="metric-help">Pause(s) du calendrier FDJ sans tirage : '+H.calendarIntervals.map(x=>fmt(x.from)+' → '+fmt(x.to)).join(', ')+'.</p>':'';main.innerHTML='<section class="card">'+head('stats','Statistiques',c.n)+'<p>Choisis le nombre de tirages récents à analyser. Les fréquences changent selon cette période et selon le jeu sélectionné. Les retards sont toujours calculés sur tout l’historique.</p>'+seg+'<p class="metric-help" data-window>Tirages analysés : '+W.analyzed+(W.analyzed<W.requested?' sur '+W.requested+' demandés (historique plus court)':'')+', du '+fmt(W.first)+' au '+fmt(W.last)+'.</p><p class="metric-help" data-history>Historique intégré : '+H.count.toLocaleString('fr-FR')+' tirages, du '+fmt(H.first)+' au '+fmt(H.last)+' (fichiers officiels FDJ).</p>'+lim+cal+'<details class="info-box"><summary>Guide de lecture des statistiques</summary><p><b>Chauds :</b> numéros apparus le plus souvent dans la période choisie. Le petit nombre indique leur nombre d’apparitions.</p><p><b>Froids :</b> numéros apparus le moins souvent sur cette même période. « Froid » ne signifie pas qu’il est dû pour sortir.</p><p><b>Égalités :</b> à valeur égale, les numéros sont classés du plus petit au plus grand ; les ex aequo qui ne tiennent pas dans le top 10 sont listés sous le classement.</p><p><b>Retard :</b> nombre de tirages écoulés depuis la dernière apparition du numéro, calculé sur tout l’historique intégré, quelle que soit la période choisie. 0 = sorti au dernier tirage.</p><p><b>Numéros Chance / étoiles :</b> fréquence d’apparition et retard des numéros complémentaires, calculés séparément des numéros principaux.</p><p><b>Récent / historique :</b> part des tirages de la période où le numéro apparaît, comparée à la même part sur tout l’historique. Sur peu de tirages, les écarts sont surtout dus au hasard.</p><p><b>Pourcentages :</b> calculés sur les valeurs exactes puis arrondis à 0,1 %, avec un total de 100 %. Le dénominateur est indiqué sous chaque bloc.</p><p><b>Sommes :</b> moyenne, médiane, minimum et maximum de la somme des cinq numéros principaux dans la période étudiée.</p><p><b>Limite :</b> ces données résument le passé. Dans un tirage équitable, chaque combinaison valide conserve la même probabilité théorique.</p></details></section>'+rankT('Numéros chauds','flame','Les plus sortis sur les '+W.analyzed+' derniers tirages',S.hot,mx,v=>v+' sorties','sorties')+rankT('Numéros froids','snow','Les moins sortis sur les '+W.analyzed+' derniers tirages',S.cold,mx,v=>v+' sorties','sorties','cool')+rankT('Retards','clock','Tirages depuis la dernière sortie · tout l’historique',S.late,gmx,late,'tirages de retard')+box(c.bl,S.bonusRanking.items.map(x=>x.n+'<small>'+x.value+' sorties • retard '+(bg[x.n]==null?'—':bg[x.n])+'</small>'),'star','Sorties sur '+W.analyzed+' tirages • retard sur tout l’historique','gold')+box('Récent plus fréquent',cmp.above.map(r=>r.n+'<small>'+pct(r.recentRate)+' vs '+pct(r.historicRate)+'</small>'),'flame','Part des '+cmp.recentDraws+' tirages récents vs '+cmp.historicDraws.toLocaleString('fr-FR')+' tirages historiques')+box('Récent moins fréquent',cmp.below.map(r=>r.n+'<small>'+pct(r.recentRate)+' vs '+pct(r.historicRate)+'</small>'),'snow','Part des '+cmp.recentDraws+' tirages récents vs '+cmp.historicDraws.toLocaleString('fr-FR')+' tirages historiques','cool')+box('Fréquences historiques',Array.from({length:c.max},(_,i)=>i+1).map(n=>n+'<small>'+hf.main[n]+' sorties</small>'),'stats','Sur '+hf.mainDraws.toLocaleString('fr-FR')+' tirages, depuis le '+fmt(H.first))+box(c.bl+' · historique',Array.from({length:c.bmax},(_,i)=>i+1).map(n=>n+'<small>'+hf.bonus[n]+' sorties</small>'),'star','Sur '+hf.bonusDraws.toLocaleString('fr-FR')+' tirages, depuis le '+fmt(hf.bonusSince)+(game==='euro'?' (règle des 12 étoiles)':''),'gold')+box('Pairs / impairs',S.parity.rows.map((r,i)=>r.even+'P/'+r.odd+'I<small>'+r.count+' • '+pct(S.parity.percent.display[i])+'</small>'),'scale','Répartition sur '+S.parity.total+' tirages')+box('Petits / grands',S.lowHigh.rows.map((r,i)=>r.low+' petits/'+r.high+' grands<small>'+r.count+' • '+pct(S.lowHigh.percent.display[i])+'</small>').concat(['Part des petits<small>'+pct(S.lowHigh.ballShare.display[0])+' des numéros</small>']),'scale','Petits '+S.lowHigh.lowRange+', grands '+S.lowHigh.highRange+' · sur '+S.lowHigh.total+' tirages')+box('Dizaines',S.decades.bins.map(b=>b.label+'<small>'+b.count+' • '+pct(b.percent)+'</small>'),'stats','Sur '+S.decades.totalBalls+' numéros tirés ('+W.analyzed+' tirages × 5)')+box('Sommes',['moy. '+dec1(S.sums.mean),'médiane '+dec1(S.sums.median),'min '+S.sums.min,'max '+S.sums.max],'sigma','Somme des 5 numéros principaux · '+S.sums.count+' tirages')+box('Distribution des sommes',S.sums.buckets.map(b=>b.label+'<small>'+b.count+' • '+pct(b.percent)+'</small>'),'sigma','Nombre de tirages par tranche de somme')+advStats()+'<p class="note" style="text-align:center">Historique = description du passé, pas prédiction.</p>'}function fr(x,d=2){return x.toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d})}function advStats(){const A=StatsAdvanced.analyze(rows(),game,{window:win}),U=A.uniformity,P=A.pairs,R=A.repeats,C=A.consecutive,Sp=A.spread;let h='';if(U)h+=box('Écart à la théorie',[ 'khi² '+fr(U.chi2,1)+'<small>'+U.df+' ddl</small>','p '+fr(U.pValue,3)+'<small>'+(U.uniformRejected?'écart notable':'compatible hasard')+'</small>',U.beyond2+' numéros<small>|z| > 1,96 (≈ '+fr(U.expectedBeyond2,1)+' attendus)</small>'].concat(U.extremes.slice(0,4).map(r=>r.n+'<small>z '+(r.z>0?'+':'')+fr(r.z,1)+'</small>')),'sigma','Sur '+U.draws.toLocaleString('fr-FR')+' tirages : chaque numéro est attendu '+fr(U.expected,1)+' fois');if(P)h+=box('Paires les plus fréquentes',P.top.map(r=>r.a+'–'+r.b+'<small>'+r.count+' fois</small>'),'stats','Attendu ≈ '+fr(P.expected,1)+' par paire. Avec '+P.totalPairs.toLocaleString('fr-FR')+' paires possibles, les plus fréquentes dépassent toujours l’attendu par simple effet du nombre.');if(Sp)h+=box('Amplitude (max − min)',['moy. '+dec1(Sp.mean),'médiane '+dec1(Sp.median),'80 % entre<small>'+Math.round(Sp.p10)+' et '+Math.round(Sp.p90)+'</small>'],'scale','Écart entre le plus grand et le plus petit numéro · '+Sp.count+' tirages');if(R)h+=box('Répétitions d’un tirage au suivant',R.rows.slice(0,4).map(r=>r.repeated+' répété'+(r.repeated>1?'s':'')+'<small>'+pct(r.percent)+' · théorie '+pct(r.expectedPercent)+'</small>'),'history','Moyenne '+fr(R.mean)+' numéro(s) repris · théorie '+fr(R.expectedMean));if(C)h+=box('Numéros consécutifs',['observé<small>'+pct(C.percent)+'</small>','théorie<small>'+pct(C.expectedPercent)+'</small>'],'stats','Part des tirages contenant au moins deux numéros qui se suivent');return h}function box(t,a,i='stats',l='',cls=''){return `<section class="card"><div class="sec-head">${ic(i)}<div><h2>${t}</h2>${l?`<span>${l}</span>`:''}</div></div><div class="list ${cls}">${a.map(x=>`<span class="chip">${x}</span>`).join('')}</div></section>`}function btTable(b){return '<table class="bt-table"><tr><th>Méthode</th><th>Moy.</th><th>≥ 2</th><th>p ajusté</th></tr>'+b.rows.map(r=>'<tr class="'+(r.vsRandom?'':'ref')+'"><td>'+r.label+'</td><td>'+fr(r.mean,3)+'</td><td>'+pct(r.atLeast2)+'</td><td>'+(r.vsRandom?fr(r.vsRandom.pAdjusted,2):'référence')+'</td></tr>').join('')+'</table>'}function btRender(r,live){const c=cfg();btr.innerHTML='<section class="card"><h2>Résultat · '+c.n+'</h2><p class="note">'+(live?'Calculé à l’instant dans votre navigateur':'Précalculé le '+new Date(r.generatedAt).toLocaleDateString('fr-FR'))+' · '+r.testedDraws.toLocaleString('fr-FR')+' tirages testés · '+r.gridsPerDraw+' grilles par méthode et par tirage · fenêtre '+r.window+' tirages.</p><div class="verdict">'+r.verdict+'</div><div class="stats mt"><div class="stat"><b>'+fr(r.theoreticalMean,3)+'</b><span>moyenne théorique</span></div><div class="stat"><b>'+pct(r.theoreticalDistribution.slice(2).reduce((a,x)=>a+x.percent,0))+'</b><span>≥ 2 théorique</span></div></div><h3 class="mt">Développement</h3><p class="note">'+fmt(r.development.from)+' → '+fmt(r.development.to)+'</p>'+btTable(r.development)+'<h3 class="mt">Validation (tirages récents)</h3><p class="note">'+fmt(r.validation.from)+' → '+fmt(r.validation.to)+'</p>'+btTable(r.validation)+'<p class="note">Moy. = bons numéros principaux par grille. p ajusté = comparaison appariée avec le hasard, corrigée de Bonferroni pour '+(r.validation.rows.length-1)+' méthodes ; en dessous de 0,05 l’écart serait significatif. Un écart doit apparaître sur les deux périodes pour être retenu.</p></section>'}function bt(){const pre=window.LVC_BACKTEST&&LVC_BACKTEST[game];main.innerHTML=`<section class="card">${head('flask','Backtest',cfg().n)}<p>Chaque méthode est rejouée tirage par tirage sur l’historique : les grilles sont générées uniquement avec les tirages antérieurs, puis comparées au tirage réel et au hasard pur.</p><details class="info-box"><summary>Comment lire ce backtest ?</summary><p><b>Sans données futures :</b> pour tester le tirage du jour J, seuls les tirages avant J sont utilisés.</p><p><b>Développement / validation :</b> les 70 % de tirages les plus anciens servent à observer, les 30 % les plus récents à vérifier. Un résultat qui n’apparaît que sur une période est du bruit.</p><p><b>Moyenne théorique :</b> nombre de bons numéros attendu pour n’importe quelle grille. Toutes les méthodes devraient s’en approcher si les tirages sont équitables.</p><p>Pour le Loto, le tableau porte sur les cinq numéros principaux. Un backtest ne garantit aucun résultat futur.</p></details><button class="btn main mt" id="btrun" onclick="runbt()">${ic('refresh')}Recalculer sur l’historique actuel</button></section><div id="btr" aria-live="polite"></div>`;if(pre)btRender(pre,false)}function runbt(){const b=document.getElementById('btrun');b.disabled=true;b.textContent='Calcul en cours…';setTimeout(()=>{try{btRender(Backtest.run(rows(),game,{window:100,gridsPerDraw:3,seed:20261013}),true)}finally{b.disabled=false;b.textContent='Recalculer sur l’historique actuel'}},30)}function savedpg(){
