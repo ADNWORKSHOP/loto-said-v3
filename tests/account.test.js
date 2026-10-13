@@ -61,14 +61,42 @@ test('validation des saisies', () => {
   assert.equal(A.isValidEmail('a@b.fr'), true);
   assert.equal(A.isValidEmail('pas-un-email'), false);
   assert.equal(A.cleanName('  <b>Jean</b>   Paul '), 'bJean/b Paul');
-  assert.equal(A.isValidOtpCode('123 456'), true);
-  assert.equal(A.isValidOtpCode('12ab56'), false);
 });
 
 test('messages d’erreur compréhensibles', () => {
-  assert.match(A.signInErrorMessage({ message: 'Signups not allowed for otp' }, 'signin'), /Créer un compte/);
-  assert.match(A.signInErrorMessage({ message: 'email rate limit exceeded' }, 'signin'), /Patientez/);
-  assert.match(A.verifyErrorMessage({ message: 'Token has expired or is invalid' }), /expiré/);
+  assert.equal(A.authErrorKind({ code: 'invalid_credentials', message: 'Invalid login credentials' }), 'invalid_credentials');
+  assert.match(A.authErrorMessage({ message: 'Invalid login credentials' }), /Mot de passe oublié/);
+  assert.match(A.authErrorMessage({ code: 'email_not_confirmed' }), /lien/);
+  assert.match(A.authErrorMessage({ message: 'User already registered' }), /existe déjà/);
+  assert.match(A.authErrorMessage({ message: 'email rate limit exceeded' }), /Patientez/);
+  assert.match(A.authErrorMessage({ name: 'AuthRetryableFetchError', message: 'Load failed' }), /internet/);
+  assert.match(A.authErrorMessage({ message: 'Auth session missing!' }), /Session expirée/);
+  assert.match(A.authErrorMessage({ code: 'same_password' }), /différent/);
+  assert.match(A.authErrorMessage({ message: 'bizarre' }), /^Erreur : bizarre/);
+});
+
+test('mot de passe : règles locales avant envoi', () => {
+  assert.match(A.passwordProblem('abc1'), /trop court/);
+  assert.match(A.passwordProblem('abcdefgh'), /faible/);
+  assert.match(A.passwordProblem('abcdefg1', 'abcdefg2'), /correspondent/);
+  assert.equal(A.passwordProblem('Chance2026', 'Chance2026'), '');
+});
+
+test('inscription : adresse déjà utilisée détectée', () => {
+  assert.equal(A.isExistingAccountSignup({ user: { id: 'x', identities: [] } }), true);
+  assert.equal(A.isExistingAccountSignup({ user: { id: 'x', identities: [{ id: 1 }] } }), false);
+  assert.equal(A.isExistingAccountSignup({ user: null }), false);
+});
+
+test('retour de lien e-mail : confirmation, réinitialisation, lien déjà utilisé', () => {
+  const ok = A.parseAuthRedirect('#access_token=abc&refresh_token=r&type=signup', '');
+  assert.equal(ok.present, true); assert.equal(ok.type, 'signup'); assert.equal(ok.error, '');
+  assert.equal(A.parseAuthRedirect('#access_token=abc&type=recovery', '').type, 'recovery');
+  const used = A.parseAuthRedirect('#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired', '');
+  assert.equal(used.error, 'otp_expired');
+  assert.match(A.redirectErrorMessage(used), /déjà utilisé/);
+  assert.equal(A.parseAuthRedirect('', '?page=home').present, false);
+  assert.equal(A.authAction('PASSWORD_RECOVERY', {}), 'recovery');
 });
 
 // Simulation d'un cycle complet avec un faux client (sans réseau) :
