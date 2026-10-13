@@ -27,8 +27,8 @@ const SOURCES = {
 const DAYS = { LU: 'LUNDI', MA: 'MARDI', ME: 'MERCREDI', JE: 'JEUDI', VE: 'VENDREDI', SA: 'SAMEDI', DI: 'DIMANCHE' };
 const WEEKDAYS = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
 
-function readCsv(file) {
-  const buf = fs.readFileSync(path.join(FDJ, file));
+function readCsv(file, dir) {
+  const buf = fs.readFileSync(path.join(dir || FDJ, file));
   const text = buf.toString('utf8').includes('\uFFFD') ? buf.toString('latin1') : buf.toString('utf8');
   const lines = text.split(/\r?\n/).filter(function (l) { return l.trim(); });
   const header = lines[0].split(';').map(function (h) { return h.trim(); });
@@ -69,10 +69,12 @@ function field(row, prefix) {
   return key ? row[key] : '';
 }
 
-function build() {
+// root : dossier du projet (par défaut ce dépôt) ; permet aux tests de travailler sur une copie.
+function build(root) {
+  const dir = path.join(root || ROOT, 'data', 'fdj');
   const ancien = [];
   SOURCES.ancienLoto.forEach(function (file) {
-    readCsv(file).forEach(function (r) {
+    readCsv(file, dir).forEach(function (r) {
       const date = toISO(r.date_de_tirage, r.__where);
       const balls = [1, 2, 3, 4, 5, 6].map(function (i) { return int(r['boule_' + i], r.__where, 'boule_' + i); });
       ancien.push({
@@ -88,7 +90,7 @@ function build() {
 
   const loto = [];
   SOURCES.loto.forEach(function (file) {
-    readCsv(file).forEach(function (r) {
+    readCsv(file, dir).forEach(function (r) {
       const date = toISO(r.date_de_tirage, r.__where);
       loto.push({
         date: date, drawId: r.annee_numero_de_tirage, drawKey: date,
@@ -103,7 +105,7 @@ function build() {
 
   const euro = [];
   SOURCES.euro.forEach(function (file) {
-    readCsv(file).forEach(function (r) {
+    readCsv(file, dir).forEach(function (r) {
       const date = toISO(r.date_de_tirage, r.__where);
       euro.push({
         date: date, drawId: r.annee_numero_de_tirage, drawKey: date,
